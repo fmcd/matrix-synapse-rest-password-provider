@@ -42,9 +42,7 @@ class RestAuthProvider(object):
         logger.info('Enforce lowercase username during registration: %s', self.regLower)
 
     @defer.inlineCallbacks
-    def check_password(self, user_id, password):
-        logger.info("Got password check for " + user_id)
-        data = {'user':{'id':user_id, 'password':password}}
+    def check(self, data):
         r = requests.post(self.endpoint + '/_matrix-internal/identity/v1/check_credentials', json = data)
         r.raise_for_status()
         r = r.json()
@@ -57,6 +55,8 @@ class RestAuthProvider(object):
         if not auth["success"]:
             logger.info("User not authenticated")
             defer.returnValue(False)
+
+        user_id = auth["mxid"]
 
         localpart = user_id.split(":", 1)[0][1:]
         logger.info("User %s authenticated", user_id)
@@ -79,7 +79,7 @@ class RestAuthProvider(object):
             logger.info("Handling profile data")
             profile = auth["profile"]
 
-            store = yield self.account_handler.hs.get_profile_handler().store
+            store = yield self.account_handler._hs.get_profile_handler().store
             if "display_name" in profile and ((registration and self.config.setNameOnRegister) or (self.config.setNameOnLogin)):
                 display_name = profile["display_name"]
                 logger.info("Setting display name to '%s' based on profile data", display_name)
@@ -98,7 +98,7 @@ class RestAuthProvider(object):
                         external_3pids.append({"medium": medium, "address": address})
                         logger.info("Looking for 3PID %s:%s in user profile", medium, address)
 
-                        validated_at = self.account_handler.hs.get_clock().time_msec()
+                        validated_at = self.account_handler._hs.get_clock().time_msec()
                         if not (yield store.get_user_id_by_threepid(medium, address)):
                             logger.info("3PID is not present, adding")
                             yield store.user_add_threepid(
@@ -129,7 +129,23 @@ class RestAuthProvider(object):
         else:
             logger.info("No profile data")
 
-        defer.returnValue(True)
+        defer.returnValue(user_id)
+
+    @defer.inlineCallbacks
+    def check_password(self, user_id, password):
+        logger.info("Got password check for " + user_id)
+        data = {'user':{'id':user_id, 'password':password}}
+
+        success = yield self.check(data)
+        defer.returnValue(success)
+
+    @defer.inlineCallbacks
+    def check_3pid_auth(self, medium, address, password):
+        logger.info("Got 3pid check for address " + address + ", medium " + medium)
+        data = {'user':{'three_pid': {'address': address, 'medium': medium}, 'password':password}}
+
+        success = yield self.check(data)
+        defer.returnValue(success)
 
     @staticmethod
     def parse_config(config):
