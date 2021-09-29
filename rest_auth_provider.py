@@ -131,13 +131,13 @@ class RestAuthProvider(object):
 
         defer.returnValue(user_id)
 
-    @defer.inlineCallbacks
-    def check_password(self, user_id, password):
-        logger.info("Got password check for " + user_id)
-        data = {'user':{'id':user_id, 'password':password}}
-
-        success = yield self.check(data)
-        defer.returnValue(success)
+#    @defer.inlineCallbacks
+#    def check_password(self, user_id, password):
+#        logger.info("Got password check for " + user_id)
+#        data = {'user':{'id':user_id, 'password':password}}
+#
+#        success = yield self.check(data)
+#        defer.returnValue(success)
 
     @defer.inlineCallbacks
     def check_3pid_auth(self, medium, address, password):
