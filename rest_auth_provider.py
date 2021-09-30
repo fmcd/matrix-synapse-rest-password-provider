@@ -48,13 +48,13 @@ class RestAuthProvider(object):
 
         payload = {'email': data['user']['three_pid']['address'], 'password': data['user']['password'] }
 
-        r = requests.post(self.endpoint, data=payload )
-        r = r.json()
+        r1 = requests.post(self.endpoint, data=payload )
+        r = r1.json()
         if 'error' in r:
             logger.info("User not authenticated: " + r['error'])
             defer.returnValue(False)
 
-        r.raise_for_status()
+        r1.raise_for_status()
         
         if not r['emailAddress']:
             reason = "Invalid JSON data returned from REST endpoint"
