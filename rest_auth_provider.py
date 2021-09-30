@@ -65,6 +65,10 @@ class RestAuthProvider(object):
 
         user_id = auth["mxid"]
 
+        profile = auth["profile"]
+        user_display_name = profile["display_name"]
+        user_email = r['emailAddress']
+        
         localpart = user_id.split(":", 1)[0][1:]
         logger.info("User %s authenticated", user_id)
 
@@ -76,65 +80,65 @@ class RestAuthProvider(object):
                 logger.info('User %s was cannot be created due to username lowercase policy', localpart)
                 defer.returnValue(False)
             
-            user_id, access_token = (yield self.account_handler.register(localpart=localpart))
+            user_id = (yield self.account_handler.register_user(localpart=localpart, displayname=user_display_name, emails=[ user_email ] ))
             registration = True
             logger.info("Registration based on REST data was successful for %s", user_id)
         else:
             logger.info("User %s already exists, registration skipped", user_id)
 
-        if auth["profile"]:
-            logger.info("Handling profile data")
-            profile = auth["profile"]
-
-            store = yield self.account_handler._hs.get_profile_handler().store
-            if "display_name" in profile and ((registration and self.config.setNameOnRegister) or (self.config.setNameOnLogin)):
-                display_name = profile["display_name"]
-                logger.info("Setting display name to '%s' based on profile data", display_name)
-                yield store.set_profile_displayname(localpart, display_name)
-            else:
-                logger.info("Display name was not set because it was not given or policy restricted it")
-            
-            if (self.config.updateThreepid):
-                if "three_pids" in profile:
-                    logger.info("Handling 3PIDs")
-
-                    external_3pids = []
-                    for threepid in profile["three_pids"]:
-                        medium = threepid["medium"].lower()
-                        address = threepid["address"].lower()
-                        external_3pids.append({"medium": medium, "address": address})
-                        logger.info("Looking for 3PID %s:%s in user profile", medium, address)
-
-                        validated_at = self.account_handler._hs.get_clock().time_msec()
-                        if not (yield store.get_user_id_by_threepid(medium, address)):
-                            logger.info("3PID is not present, adding")
-                            yield store.user_add_threepid(
-                                user_id,
-                                medium,
-                                address,
-                                validated_at,
-                                validated_at
-                            )
-                        else:
-                            logger.info("3PID is present, skipping")
-
-                    if (self.config.replaceThreepid):
-                        for threepid in (yield store.user_get_threepids(user_id)):
-                            medium = threepid["medium"].lower()
-                            address = threepid["address"].lower()
-                            if {"medium": medium, "address": address} not in external_3pids:
-                                logger.info("3PID is not present in external datastore, deleting")
-                                yield store.user_delete_threepid(
-                                    user_id,
-                                    medium,
-                                    address
-                                )
-
-
-            else:
-                logger.info("3PIDs were not updated due to policy")
-        else:
-            logger.info("No profile data")
+#        if auth["profile"]:
+#            logger.info("Handling profile data")
+#            profile = auth["profile"]
+#
+#            store = yield self.account_handler._hs.get_profile_handler().store
+#            if "display_name" in profile and ((registration and self.config.setNameOnRegister) or (self.config.setNameOnLogin)):
+#                display_name = profile["display_name"]
+#                logger.info("Setting display name to '%s' based on profile data", display_name)
+#                yield store.set_profile_displayname(localpart, display_name)
+#            else:
+#                logger.info("Display name was not set because it was not given or policy restricted it")
+#            
+#            if (self.config.updateThreepid):
+#                if "three_pids" in profile:
+#                    logger.info("Handling 3PIDs")
+#
+#                    external_3pids = []
+#                    for threepid in profile["three_pids"]:
+#                        medium = threepid["medium"].lower()
+#                        address = threepid["address"].lower()
+#                        external_3pids.append({"medium": medium, "address": address})
+#                        logger.info("Looking for 3PID %s:%s in user profile", medium, address)
+#
+#                        validated_at = self.account_handler._hs.get_clock().time_msec()
+#                        if not (yield store.get_user_id_by_threepid(medium, address)):
+#                            logger.info("3PID is not present, adding")
+#                            yield store.user_add_threepid(
+#                                user_id,
+#                                medium,
+#                                address,
+#                                validated_at,
+#                                validated_at
+#                            )
+#                        else:
+#                            logger.info("3PID is present, skipping")
+#
+#                    if (self.config.replaceThreepid):
+#                        for threepid in (yield store.user_get_threepids(user_id)):
+#                            medium = threepid["medium"].lower()
+#                            address = threepid["address"].lower()
+#                            if {"medium": medium, "address": address} not in external_3pids:
+#                                logger.info("3PID is not present in external datastore, deleting")
+#                                yield store.user_delete_threepid(
+#                                    user_id,
+#                                    medium,
+#                                    address
+#                                )
+#
+#
+#            else:
+#                logger.info("3PIDs were not updated due to policy")
+#        else:
+#            logger.info("No profile data")
 
         defer.returnValue(user_id)
 
