@@ -49,18 +49,19 @@ class RestAuthProvider(object):
         payload = {'email': data['user']['three_pid']['address'], 'password': data['user']['password'] }
 
         r = requests.post(self.endpoint, data=payload )
-        r.raise_for_status()
         r = r.json()
         if 'error' in r:
             logger.info("User not authenticated: " + r['error'])
             defer.returnValue(False)
+
+        r.raise_for_status()
         
         if not r['emailAddress']:
             reason = "Invalid JSON data returned from REST endpoint"
             logger.warning(reason)
             raise RuntimeError(reason)
 
-        auth = { 'success': True, 'mxid': _hash_mxid( r['emailAddress'] ),  'profile': { 'display_name': (r['firstName'] + " " + r['lastName']).strip(), 'three_pids': { 'medium': 'email', 'address': r['emailAddress'] } } }
+        auth = { 'success': True, 'mxid': _hash_mxid( r['emailAddress'] ),  'profile': { 'display_name': (r['firstName'] + " " + r['lastName']).strip(), 'three_pids': [ { 'medium': 'email', 'address': r['emailAddress'] } ] } }
 
         user_id = auth["mxid"]
 
@@ -243,3 +244,4 @@ def _hash_mxid(email):
     hashedmxid = re.sub(r"[^a-z0-9._=\-/]", '_', hashedmxid)
     hashedmxid = "@" + hashedmxid + ":flystanwell.com"
     return hashedmxid
+
