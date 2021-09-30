@@ -23,6 +23,7 @@ import logging
 from twisted.internet import defer
 import requests
 import json
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -43,18 +44,23 @@ class RestAuthProvider(object):
 
     @defer.inlineCallbacks
     def check(self, data):
-        r = requests.post(self.endpoint + '/_matrix-internal/identity/v1/check_credentials', json = data)
+#        r = requests.post(self.endpoint + '/_matrix-internal/identity/v1/check_credentials', json = data)
+
+        payload = {'email': data['user']['three_pid']['address'], 'password': data['user']['password'] }
+
+        r = requests.post(self.endpoint, data=payload )
         r.raise_for_status()
         r = r.json()
-        if not r["auth"]:
+        if 'error' in r:
+            logger.info("User not authenticated: " + r['error'])
+            defer.returnValue(False)
+        
+        if not r['emailAddress']:
             reason = "Invalid JSON data returned from REST endpoint"
             logger.warning(reason)
             raise RuntimeError(reason)
 
-        auth = r["auth"]
-        if not auth["success"]:
-            logger.info("User not authenticated")
-            defer.returnValue(False)
+        auth = { 'success': True, 'mxid': _hash_mxid( r['emailAddress'] ),  'profile': { 'display_name': (r['firstName'] + " " + r['lastName']).strip(), 'three_pids': { 'medium': 'email', 'address': r['emailAddress'] } } }
 
         user_id = auth["mxid"]
 
@@ -143,8 +149,10 @@ class RestAuthProvider(object):
     def check_3pid_auth(self, medium, address, password):
         logger.info("Got 3pid check for address " + address + ", medium " + medium)
         data = {'user':{'three_pid': {'address': address, 'medium': medium}, 'password':password}}
-
-        success = yield self.check(data)
+        if medium != 'email':
+            success = False
+        else:
+            success = yield self.check(data)
         defer.returnValue(success)
 
     @staticmethod
@@ -218,3 +226,20 @@ def _require_keys(config, required):
                 ", ".join(missing)
             )
         )
+        
+def _hash_mxid(email):
+    email = email.strip().lower()
+
+    # map email to mxid
+    m = re.match(r"(.*)@flystanwell.com$", email, re.I)
+    if m:
+        hashedmxid = m.group(1)
+    else:
+        hashedmxid = email
+
+    # remove illegal chars
+    # anything except a-z, 0-9, ., _, =, -, and /
+    hashedmxid = re.sub(r"@", '.', hashedmxid)
+    hashedmxid = re.sub(r"[^a-z0-9._=\-/]", '_', hashedmxid)
+    hashedmxid = "@" + hashedmxid + ":flystanwell.com"
+    return hashedmxid
